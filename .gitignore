@@ -4,7 +4,22 @@ venv/
 # Raw and intermediate data
 data/raw/
 
+# Processed outputs and model artifacts
+data/processed/
+models/
+
+# Log files
+logs/
+
+# Bytecode and caches
+__pycache__/
+*.py[cod]
+
+# Environment variables
+.env
+
 # VS Code settings
 .vscode/
 
+# macOS Finder
 .DS_Store

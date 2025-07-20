@@ -1,0 +1,17 @@
+# Dockerfile.dashboard
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy requirements & install
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy dashboard code and data
+COPY dashboard.py .
+COPY data/processed/features.csv ./data/processed/features.csv
+
+EXPOSE 8501
+
+CMD ["streamlit", "run", "dashboard.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
