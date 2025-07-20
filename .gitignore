@@ -1,0 +1,8 @@
+# Python environment
+venv/
+
+# Raw and intermediate data
+data/raw/
+
+# VS Code settings
+.vscode/
