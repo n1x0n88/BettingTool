@@ -6,3 +6,5 @@ data/raw/
 
 # VS Code settings
 .vscode/
+
+.DS_Store
