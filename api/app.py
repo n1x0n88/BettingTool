@@ -3,14 +3,13 @@
 import os
 import joblib
 import pandas as pd
-
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 app = FastAPI(title="Football Win Probability API")
 
 # ────────────────────────────────────────────────────────────────────────────────
-# 1. Define the 17 features your ensemble expects
+# Pydantic model: define the 17 input features
 # ────────────────────────────────────────────────────────────────────────────────
 class MatchInput(BaseModel):
     HomeForm: float
@@ -32,51 +31,50 @@ class MatchInput(BaseModel):
     H2H_AwayGoalsAvg: float
 
     class Config:
-        extra = "ignore"  # ignore any unexpected fields in the payload
+        extra = "ignore"
 
 # ────────────────────────────────────────────────────────────────────────────────
-# 2. Load all models once at startup
+# Globals for loaded models and feature order
 # ────────────────────────────────────────────────────────────────────────────────
 models = {}
-feature_order = None
+feature_order = []
 
+# ────────────────────────────────────────────────────────────────────────────────
+# Load models once at startup
+# ────────────────────────────────────────────────────────────────────────────────
 @app.on_event("startup")
 def load_models():
     global models, feature_order
-
-    base = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    model_names = ["lr_baseline", "rf_model", "xgb_model"]
-
-    for name in model_names:
-        path = os.path.join(base, "models", f"{name}.pkl")
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    for name in ["lr_baseline", "rf_model", "xgb_model"]:
+        path = os.path.join(base_dir, "models", f"{name}.pkl")
         models[name] = joblib.load(path)
-
-    # Cache the feature names in the order used during training
     feature_order = list(models["lr_baseline"].feature_names_in_)
 
+
 # ────────────────────────────────────────────────────────────────────────────────
-# 3. Ensemble prediction endpoint
+# Ensemble prediction endpoint
 # ────────────────────────────────────────────────────────────────────────────────
 @app.post("/predict-ensemble")
 def predict_ensemble(match: MatchInput):
-    # Turn the incoming JSON into a one-row DataFrame
+    # 1. Build DataFrame from request
     df_in = pd.DataFrame([match.dict()])
 
-    # Reindex to ensure exactly the columns the model saw at fit time
+    # 2. Reindex to the exact feature names used during training
     X = df_in.reindex(columns=feature_order, fill_value=0)
 
-    # Sanity check: if something’s still missing or extra, report it
+    # 3. Validate columns
     missing = set(feature_order) - set(X.columns)
     extra   = set(X.columns) - set(feature_order)
     if missing or extra:
-        detail = []
+        details = []
         if missing:
-            detail.append(f"Missing features: {sorted(missing)}")
+            details.append(f"Missing features: {sorted(missing)}")
         if extra:
-            detail.append(f"Unexpected features: {sorted(extra)}")
-        raise HTTPException(status_code=400, detail="; ".join(detail))
+            details.append(f"Unexpected features: {sorted(extra)}")
+        raise HTTPException(status_code=400, detail="; ".join(details))
 
-    # Predict each model’s home-win probability
+    # 4. Predict probabilities
     try:
         probs = {
             name: mdl.predict_proba(X)[:, 1][0]
@@ -85,7 +83,10 @@ def predict_ensemble(match: MatchInput):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Average them for an ensemble
+    # 5. Compute ensemble as simple average
     ensemble_prob = sum(probs.values()) / len(probs)
 
-    return {"individual_probs": probs, "ensemble_prob": ensemble_prob}
+    return {
+        "individual_probs": probs,
+        "ensemble_prob": ensemble_prob
+    }
