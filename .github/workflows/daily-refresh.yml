@@ -1,0 +1,39 @@
+name: Daily Data Refresh
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # 3 AM UTC (adjust as needed)
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install dependencies
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install pandas scikit-learn xgboost joblib
+
+      - name: Refresh features & train
+        run: |
+          source venv/bin/activate
+          python scripts/compute_features.py
+          python scripts/train_models.py
+
+      - name: Commit & Push Artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add data/processed/features_h2h.csv models/
+          git commit -m "ci: daily refresh of features & models" || echo "No changes"
+          git push
